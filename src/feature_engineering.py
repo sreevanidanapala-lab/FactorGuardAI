@@ -1,26 +1,50 @@
 import pandas as pd
-import os
 import joblib
+import os
+
 df = pd.read_csv("data/raw_sensor_data.csv")
 
 df.sort_values(["arm_id", "hour"], inplace=True)
 
-# Rolling window features (last 24 hours)
-df["vibration_mean_24h"] = df.groupby("arm_id")["vibration"].rolling(24).mean().reset_index(0, drop=True)
-df["temp_mean_24h"] = df.groupby("arm_id")["temperature"].rolling(24).mean().reset_index(0, drop=True)
-df["pressure_mean_24h"] = df.groupby("arm_id")["pressure"].rolling(24).mean().reset_index(0, drop=True)
+# -----------------------------
+# Rolling Features (24h window)
+# -----------------------------
+df["vibration_roll_mean_24h"] = (
+    df.groupby("arm_id")["vibration"]
+    .rolling(24)
+    .mean()
+    .reset_index(level=0, drop=True)
+)
+
+df["temp_roll_mean_24h"] = (
+    df.groupby("arm_id")["temperature"]
+    .rolling(24)
+    .mean()
+    .reset_index(level=0, drop=True)
+)
+
+df["pressure_roll_std_24h"] = (
+    df.groupby("arm_id")["pressure"]
+    .rolling(24)
+    .std()
+    .reset_index(level=0, drop=True)
+)
+
+# -----------------------------
+# 24 HOURS AHEAD PREDICTION
+# -----------------------------
+df["failure_24h_ahead"] = (
+    df.groupby("arm_id")["failure"].shift(-24)
+)
 
 df.dropna(inplace=True)
 
-df.to_csv("data/processed_data.csv", index=False)
+# Keep only relevant columns
+df = df.drop(columns=["failure"])
+
+os.makedirs("data", exist_ok=True)
+joblib.dump(df, "data/processed_features.pkl")
+
 print("✅ Feature engineering completed")
-df = pd.read_csv("data/raw_sensor_data.csv")
-
-# ... do feature engineering ...
-
-# ✅ Ensure the folder exists
-os.makedirs("data", exist_ok=True)  # <- creates 'data' folder if it doesn't exist
-
-# Save processed features
-joblib.dump(df, "data/processed_features.pkl")  # <- file path is here
-print("✅ Processed features saved at data/processed_features.pkl")
+print("Final dataset size:", df.shape)
+print("Failure rate (24h ahead):", round(df["failure_24h_ahead"].mean() * 100, 3), "%")
