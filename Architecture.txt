@@ -1,0 +1,3 @@
+Sensors → Data Processing → Feature Engineering →
+XGBoost Model → SHAP Validation →
+Flask API → Factory Dashboard → Alert System
