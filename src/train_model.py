@@ -1,80 +1,90 @@
 import pandas as pd
 import numpy as np
 import joblib
-import os
-import xgboost as xgb
+
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import classification_report, average_precision_score
+from sklearn.metrics import classification_report, precision_recall_curve, auc
+from xgboost import XGBClassifier
+from imblearn.over_sampling import SMOTE
 
-# -----------------------------
-# Load Processed Data
-# -----------------------------
-df = joblib.load("data/processed_features.pkl")
+# ---------------------------------------------------
+# 1️⃣ Load Data
+# ---------------------------------------------------
 
-# Features
-feature_cols = [
-    "vibration",
-    "temperature",
-    "pressure",
-    "vibration_roll_mean_24h",
-    "temp_roll_mean_24h",
-    "pressure_roll_std_24h"
-]
-
-X = df[feature_cols].fillna(0)
-y = df["failure_24h_ahead"].astype(int)
-
-# -----------------------------
-# Train Test Split
-# -----------------------------
-X_train, X_test, y_train, y_test = train_test_split(
-    X, y, test_size=0.2, stratify=y, random_state=42
-)
+df = pd.read_csv("data/factory_guard_dataset.csv")
 
 print("Training class distribution:")
-print(y_train.value_counts())
+print(df["failure_24h_ahead"].value_counts())
 
-# -----------------------------
-# Handle Imbalance Properly
-# -----------------------------
-scale_pos_weight = len(y_train[y_train == 0]) / len(y_train[y_train == 1])
+# ---------------------------------------------------
+# 2️⃣ Features & Target
+# ---------------------------------------------------
 
-print("Scale_pos_weight:", round(scale_pos_weight, 2))
+X = df.drop("failure_24h_ahead", axis=1)
+y = df["failure_24h_ahead"]
 
-# -----------------------------
-# XGBoost Model
-# -----------------------------
-model = xgb.XGBClassifier(
-    n_estimators=300,
-    learning_rate=0.05,
-    max_depth=6,
-    subsample=0.8,
-    colsample_bytree=0.8,
-    scale_pos_weight=scale_pos_weight,  # 🔥 imbalance fix
-    eval_metric="logloss",
+# ---------------------------------------------------
+# 3️⃣ Train-Test Split (Stratified)
+# ---------------------------------------------------
+
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y,
+    test_size=0.2,
+    stratify=y,
     random_state=42
 )
 
-model.fit(X_train, y_train)
+# ---------------------------------------------------
+# 4️⃣ Apply SMOTE (ONLY on training data)
+# ---------------------------------------------------
+
+smote = SMOTE(random_state=42, sampling_strategy=0.3)
+
+X_train_res, y_train_res = smote.fit_resample(X_train, y_train)
+
+print("\nAfter SMOTE class distribution:")
+print(pd.Series(y_train_res).value_counts())
+
+# ---------------------------------------------------
+# 5️⃣ Train XGBoost Model
+# ---------------------------------------------------
+
+model = XGBClassifier(
+    n_estimators=500,
+    max_depth=6,
+    learning_rate=0.05,
+    subsample=0.8,
+    colsample_bytree=0.8,
+    scale_pos_weight=1,  # already balanced by SMOTE
+    random_state=42,
+    eval_metric="logloss",
+    use_label_encoder=False
+)
+
+model.fit(X_train_res, y_train_res)
 
 print("✅ XGBoost model trained successfully")
 
-# -----------------------------
-# PR-AUC Evaluation (Correct Metric)
-# -----------------------------
+# ---------------------------------------------------
+# 6️⃣ Evaluation
+# ---------------------------------------------------
+
+y_pred = model.predict(X_test)
 y_prob = model.predict_proba(X_test)[:, 1]
-pr_auc = average_precision_score(y_test, y_prob)
 
 print("\n📊 Classification Report:")
-print(classification_report(y_test, model.predict(X_test)))
+print(classification_report(y_test, y_pred))
 
-print("🔥 PR-AUC Score:", round(pr_auc, 4))
+precision, recall, _ = precision_recall_curve(y_test, y_prob)
+pr_auc = auc(recall, precision)
 
-# -----------------------------
-# Save Model
-# -----------------------------
-os.makedirs("models", exist_ok=True)
+print(f"\n🔥 PR-AUC Score: {round(pr_auc, 4)}")
+
+# ---------------------------------------------------
+# 7️⃣ Save Model
+# ---------------------------------------------------
+
 joblib.dump(model, "models/xgb_production_model.pkl")
-joblib.dump(feature_cols, "models/feature_columns.pkl")
+joblib.dump(list(X.columns), "models/feature_columns.pkl")
 
 print("✅ Production model saved successfully")
