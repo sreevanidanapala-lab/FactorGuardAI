@@ -1,12 +1,11 @@
 import pandas as pd
-import joblib
 import os
 
 df = pd.read_csv("data/raw_sensor_data.csv")
 
 df.sort_values(["arm_id", "hour"], inplace=True)
 
-# Rolling Features
+# Rolling features
 df["vibration_roll_mean_24h"] = (
     df.groupby("arm_id")["vibration"]
     .rolling(24).mean().reset_index(level=0, drop=True)
@@ -22,7 +21,7 @@ df["pressure_roll_std_24h"] = (
     .rolling(24).std().reset_index(level=0, drop=True)
 )
 
-# 24h Ahead Label
+# 24h ahead failure
 df["failure_24h_ahead"] = (
     df.groupby("arm_id")["failure"].shift(-24)
 )
@@ -35,6 +34,6 @@ os.makedirs("data", exist_ok=True)
 df.to_csv("data/processed_features.csv", index=False)
 
 print("✅ Feature engineering completed")
-print("Final dataset size:", df.shape)
+print("Final dataset:", df.shape)
 print("Failure rate (24h ahead):", round(df["failure_24h_ahead"].mean() * 100, 3), "%")
 

@@ -1,31 +1,16 @@
 import pandas as pd
 import numpy as np
 import joblib
+import os
 
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report, precision_recall_curve, auc
 from xgboost import XGBClassifier
-from imblearn.over_sampling import SMOTE
 
-# ---------------------------------------------------
-# 1️⃣ Load Data
-# ---------------------------------------------------
-
-df = pd.read_csv("data/factory_guard_dataset.csv")
-
-print("Training class distribution:")
-print(df["failure_24h_ahead"].value_counts())
-
-# ---------------------------------------------------
-# 2️⃣ Features & Target
-# ---------------------------------------------------
+df = pd.read_csv("data/processed_features.csv")
 
 X = df.drop("failure_24h_ahead", axis=1)
 y = df["failure_24h_ahead"]
-
-# ---------------------------------------------------
-# 3️⃣ Train-Test Split (Stratified)
-# ---------------------------------------------------
 
 X_train, X_test, y_train, y_test = train_test_split(
     X, y,
@@ -34,43 +19,32 @@ X_train, X_test, y_train, y_test = train_test_split(
     random_state=42
 )
 
-# ---------------------------------------------------
-# 4️⃣ Apply SMOTE (ONLY on training data)
-# ---------------------------------------------------
-
-smote = SMOTE(random_state=42, sampling_strategy=0.3)
-
-X_train_res, y_train_res = smote.fit_resample(X_train, y_train)
-
-print("\nAfter SMOTE class distribution:")
-print(pd.Series(y_train_res).value_counts())
-
-# ---------------------------------------------------
-# 5️⃣ Train XGBoost Model
-# ---------------------------------------------------
+scale_pos_weight = y_train.value_counts()[0] / y_train.value_counts()[1]
+print("Scale_pos_weight:", round(scale_pos_weight, 2))
 
 model = XGBClassifier(
-    n_estimators=500,
-    max_depth=6,
-    learning_rate=0.05,
-    subsample=0.8,
-    colsample_bytree=0.8,
-    scale_pos_weight=1,  # already balanced by SMOTE
+    n_estimators=600,
+    max_depth=7,
+    learning_rate=0.03,
+    subsample=0.9,
+    colsample_bytree=0.9,
+    scale_pos_weight=scale_pos_weight,
     random_state=42,
-    eval_metric="logloss",
-    use_label_encoder=False
+    eval_metric="logloss"
 )
 
-model.fit(X_train_res, y_train_res)
+model.fit(X_train, y_train)
 
 print("✅ XGBoost model trained successfully")
 
-# ---------------------------------------------------
-# 6️⃣ Evaluation
-# ---------------------------------------------------
-
-y_pred = model.predict(X_test)
+# -----------------------------
+# Threshold Tuning
+# -----------------------------
 y_prob = model.predict_proba(X_test)[:, 1]
+
+# Lower threshold for better recall
+threshold = 0.25
+y_pred = (y_prob > threshold).astype(int)
 
 print("\n📊 Classification Report:")
 print(classification_report(y_test, y_pred))
@@ -78,12 +52,10 @@ print(classification_report(y_test, y_pred))
 precision, recall, _ = precision_recall_curve(y_test, y_prob)
 pr_auc = auc(recall, precision)
 
-print(f"\n🔥 PR-AUC Score: {round(pr_auc, 4)}")
+print("🔥 PR-AUC Score:", round(pr_auc, 4))
 
-# ---------------------------------------------------
-# 7️⃣ Save Model
-# ---------------------------------------------------
-
+# Save model
+os.makedirs("models", exist_ok=True)
 joblib.dump(model, "models/xgb_production_model.pkl")
 joblib.dump(list(X.columns), "models/feature_columns.pkl")
 

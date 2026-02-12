@@ -5,26 +5,27 @@ import os
 np.random.seed(42)
 
 NUM_ARMS = 500
-HOURS = 30 * 24  # 30 days hourly
+HOURS = 30 * 24  # 30 days
 
 data = []
 
 for arm_id in range(NUM_ARMS):
 
-    base_vibration = np.random.normal(5, 0.5)
-    base_temp = np.random.normal(70, 2)
+    base_vibration = np.random.normal(5, 0.3)
+    base_temp = np.random.normal(70, 1.5)
     base_pressure = np.random.normal(30, 1)
 
-    failure_hour = np.random.randint(400, 700)  # controlled failure time
+    # Each arm fails once in 30 days
+    failure_hour = np.random.randint(400, 650)
 
     for hour in range(HOURS):
 
-        # Gradual degradation before failure
-        degradation = max(0, hour - (failure_hour - 48)) / 48
+        # 96-hour gradual degradation window
+        degradation = max(0, hour - (failure_hour - 96)) / 96
 
-        vibration = base_vibration + degradation * 3 + np.random.normal(0, 0.3)
-        temperature = base_temp + degradation * 10 + np.random.normal(0, 1)
-        pressure = base_pressure + degradation * 5 + np.random.normal(0, 0.5)
+        vibration = base_vibration + degradation * 5 + np.random.normal(0, 0.2)
+        temperature = base_temp + degradation * 18 + np.random.normal(0, 0.8)
+        pressure = base_pressure + degradation * 7 + np.random.normal(0, 0.3)
 
         failure = 1 if hour == failure_hour else 0
 
