@@ -1,56 +1,55 @@
+import pandas as pd
 import joblib
 import shap
-import pandas as pd
 import matplotlib.pyplot as plt
-import numpy as np
+import os
 
 # -----------------------------
-# 1. Load Model + Data
+# Load Model & Data
 # -----------------------------
 model = joblib.load("models/xgb_production_model.pkl")
-feature_cols = joblib.load("models/feature_columns.pkl")
-df = joblib.load("data/processed_features.pkl")
+feature_columns = joblib.load("models/feature_columns.pkl")
+
+df = pd.read_csv("data/processed_features.csv")
+
+X = df[feature_columns]
+
+# Use small sample for speed
+X_sample = X.sample(1000, random_state=42)
+
+print("✅ Model and data loaded")
 
 # -----------------------------
-# 2. Prepare Feature Matrix
-# -----------------------------
-X = df[feature_cols].fillna(0)
-y = df["failure_24h_ahead"]
-
-# Use sample for speed
-X_sample = X.sample(min(1000, len(X)), random_state=42)
-
-# -----------------------------
-# 3. Create SHAP Explainer
+# SHAP Explainer
 # -----------------------------
 explainer = shap.TreeExplainer(model)
 shap_values = explainer.shap_values(X_sample)
 
-# -----------------------------
-# 4. Global Feature Importance
-# -----------------------------
-print("Generating SHAP summary plot...")
+print("✅ SHAP values calculated")
 
+# -----------------------------
+# Create plots folder
+# -----------------------------
+os.makedirs("shap_outputs", exist_ok=True)
+
+# -----------------------------
+# 1️⃣ Global Feature Importance
+# -----------------------------
 plt.figure()
-shap.summary_plot(shap_values, X_sample, show=True)
+shap.summary_plot(shap_values, X_sample, show=False)
+plt.savefig("shap_outputs/shap_summary.png", bbox_inches="tight")
+plt.close()
+
+print("✅ SHAP summary plot saved")
 
 # -----------------------------
-# 5. Local Explanation (One Failure Case)
+# 2️⃣ Bar Importance Plot
 # -----------------------------
-failure_indices = y[y == 1].index
+plt.figure()
+shap.summary_plot(shap_values, X_sample, plot_type="bar", show=False)
+plt.savefig("shap_outputs/shap_bar.png", bbox_inches="tight")
+plt.close()
 
-if len(failure_indices) > 0:
-    idx = failure_indices[0]
-    single_instance = X.loc[[idx]]
+print("✅ SHAP bar plot saved")
 
-    shap_single = explainer.shap_values(single_instance)
-
-    print("\nGenerating Local SHAP Waterfall Plot...")
-
-    shap.plots._waterfall.waterfall_legacy(
-        explainer.expected_value,
-        shap_single[0],
-        feature_names=feature_cols
-    )
-else:
-    print("No failure cases found for local explanation.")
+print("\n🔥 Explainability complete. Check shap_outputs folder.")
