@@ -1,61 +1,42 @@
 from flask import Flask, request, jsonify
 import joblib
-import pandas as pd
-import time
-import os
+import numpy as np
+
+# -----------------------------
+# Load Model
+# -----------------------------
+model = joblib.load("models/xgb_production_model.pkl")
+feature_columns = joblib.load("models/feature_columns.pkl")
 
 app = Flask(__name__)
 
-# -----------------------------
-# Load Model + Feature List
-# -----------------------------
-if not os.path.exists("models/xgb_production_model.pkl"):
-    raise FileNotFoundError("Model not found. Train model first.")
+THRESHOLD = 0.35
 
-model = joblib.load("models/xgb_production_model.pkl")
-feature_cols = joblib.load("models/feature_columns.pkl")
-
-
-# -----------------------------
-# Health Check Route
-# -----------------------------
 @app.route("/")
 def home():
-    return "FactoryGuard AI - 24h Failure Prediction API Running"
+    return {"message": "FactoryGuard AI API is running"}
 
-
-# -----------------------------
-# Prediction Route
-# -----------------------------
 @app.route("/predict", methods=["POST"])
 def predict():
 
-    start_time = time.time()
-
     data = request.get_json()
 
-    if not data:
-        return jsonify({"error": "No JSON input provided"}), 400
+    try:
+        input_data = [data[col] for col in feature_columns]
+    except KeyError as e:
+        return jsonify({"error": f"Missing feature: {str(e)}"}), 400
 
-    # Convert input to DataFrame
-    input_df = pd.DataFrame([data])
+    input_array = np.array(input_data).reshape(1, -1)
 
-    # Ensure correct feature order
-    input_df = input_df.reindex(columns=feature_cols, fill_value=0)
+    prob = model.predict_proba(input_array)[0][1]
+    prediction = int(prob > THRESHOLD)
 
-    # Predict probability
-    probability = model.predict_proba(input_df)[0][1]
+    result = {
+        "failure_probability": round(float(prob), 4),
+        "predicted_failure_24h": prediction
+    }
 
-    latency = (time.time() - start_time) * 1000
-
-    risk_level = "HIGH" if probability > 0.8 else "LOW"
-
-    return jsonify({
-        "failure_probability_24h": round(float(probability), 4),
-        "risk_level": risk_level,
-        "latency_ms": round(latency, 2)
-    })
-
+    return jsonify(result)
 
 if __name__ == "__main__":
     app.run(debug=True)
