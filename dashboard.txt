@@ -1,0 +1,11 @@
+Interactive Streamlit dashboard
+
+Easy deployment
+
+Python-based
+
+Fast prototyping
+
+Good for ML demos
+
+No need for frontend coding
