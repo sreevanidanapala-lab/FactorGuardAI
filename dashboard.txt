@@ -9,3 +9,5 @@ Fast prototyping
 Good for ML demos
 
 No need for frontend coding
+
+ "  streamlit run src/ 6_dashbaord.py "  use this prompt to ececute file
